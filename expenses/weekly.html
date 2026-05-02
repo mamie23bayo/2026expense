@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bayo Bowls — Weekly Payout</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Open Sans', sans-serif; color: #212121; background: #f7f7f5; -webkit-font-smoothing: antialiased; }
+    .display { font-family: 'Cormorant Garamond', serif; font-weight: 300; }
+    .label-sm { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; font-weight: 600; color: #8b8b8b; }
+    .card { background: #fff; border: 1px solid #e5e5e5; }
+    .btn { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; padding: 11px 16px; cursor: pointer; border: 1px solid #212121; background: transparent; color: #212121; text-decoration: none; }
+    .btn:hover { background: #212121; color: #fff; }
+    .divider { width: 32px; height: 2px; background: #29925a; }
+    .pill { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding: 4px 8px; border: 1px solid #e5e5e5; color: #777; }
+    @media (max-width: 768px) {
+      .input-mobile { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header style="background:#fff; border-bottom:1px solid #e5e5e5;">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+      <div>
+        <div class="display text-xl">Bayo Bowls</div>
+        <div class="label-sm" style="color:#29925a;">Weekly Payout Summary</div>
+      </div>
+      <a href="index.html" class="btn">Back To App</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <div class="card p-5 sm:p-6 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between" style="gap:16px;">
+        <div>
+          <div class="label-sm mb-1">This Payout Week</div>
+          <div class="divider mb-3"></div>
+          <div id="current-week-range" style="font-size:13px; color:#666;">-</div>
+        </div>
+        <div class="pill" id="payout-day-pill">Week: Wednesday to Tuesday · Payout: Following Sunday evening</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div class="card p-6">
+        <div class="label-sm mb-2">Income This Week</div>
+        <div class="display text-4xl" id="week-income">$0.00</div>
+      </div>
+      <div class="card p-6">
+        <div class="label-sm mb-2">Spent This Week</div>
+        <div class="display text-4xl" id="week-expenses">$0.00</div>
+      </div>
+      <div class="card p-6">
+        <div class="label-sm mb-2">Net This Week</div>
+        <div class="display text-4xl" id="week-net">$0.00</div>
+      </div>
+    </div>
+
+    <div class="card p-5 sm:p-6 mb-6">
+      <div class="label-sm mb-1">Last 8 Weeks</div>
+      <div class="divider mb-4"></div>
+      <canvas id="weekly-net-chart" height="140"></canvas>
+    </div>
+
+    <div class="card p-5 sm:p-6">
+      <div class="label-sm mb-1">Weekly Breakdown</div>
+      <div class="divider mb-4"></div>
+      <div id="weekly-table-wrap" style="overflow:auto;">
+        <table style="width:100%; border-collapse:collapse; min-width:640px;">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid #e5e5e5;">
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Week</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Income</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Expenses</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Net</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Payout ETA</th>
+            </tr>
+          </thead>
+          <tbody id="weekly-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="weekly.js"></script>
+</body>
+</html>

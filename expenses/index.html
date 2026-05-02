@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bayo Bowls — Business Expenses</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Open Sans', sans-serif; color: #212121; background: #f7f7f5; -webkit-font-smoothing: antialiased; }
+    .display { font-family: 'Cormorant Garamond', serif; font-weight: 300; }
+    .label-sm { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; font-weight: 600; color: #8b8b8b; }
+    .tab-btn { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; padding: 10px 20px; border-bottom: 2px solid transparent; transition: all 0.2s; cursor: pointer; color: #8b8b8b; background: none; border-top: none; border-left: none; border-right: none; }
+    .tab-btn.active { color: #29925a; border-bottom-color: #29925a; }
+    .tab-btn:hover:not(.active) { color: #212121; }
+    .btn { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; padding: 12px 24px; cursor: pointer; transition: all 0.2s; border: none; font-family: 'Open Sans', sans-serif; }
+    .btn-green { background: #29925a; color: #fff; }
+    .btn-green:hover { background: #1f7347; }
+    .btn-dark { background: #212121; color: #fff; }
+    .btn-dark:hover { background: #29925a; }
+    .btn-outline { border: 1px solid #212121 !important; background: transparent; color: #212121; }
+    .btn-outline:hover { background: #212121; color: #fff; }
+    .form-input { border: 1px solid #e5e5e5; padding: 11px 14px; font-size: 13px; width: 100%; outline: none; font-family: 'Open Sans', sans-serif; transition: border-color 0.2s; color: #212121; background: #fff; }
+    .form-input:focus { border-color: #29925a; }
+    .form-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; color: #8b8b8b; display: block; margin-bottom: 6px; }
+    .card { background: #fff; border: 1px solid #e5e5e5; }
+    .stat-card { background: #fff; border: 1px solid #e5e5e5; padding: 24px; }
+    .divider { width: 32px; height: 2px; background: #29925a; }
+    #tab-dashboard, #tab-expense, #tab-income, #tab-history { display: none; }
+    #tab-dashboard.active, #tab-expense.active, #tab-income.active, #tab-history.active { display: block; }
+    .receipt-thumb { width: 64px; height: 64px; object-fit: cover; border: 1px solid #e5e5e5; cursor: pointer; }
+    .receipt-thumb:hover { border-color: #29925a; }
+    .status-pill { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; padding: 3px 10px; }
+    .upload-zone { border: 2px dashed #e5e5e5; transition: border-color 0.2s; cursor: pointer; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: #29925a; background: #f0faf4; }
+    #toast { position: fixed; bottom: 24px; right: 24px; background: #212121; color: #fff; padding: 12px 20px; font-size: 11px; letter-spacing: 1px; z-index: 999; transform: translateY(80px); opacity: 0; transition: all 0.3s; }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; pointer-events: none; }
+    #lightbox.open { display: flex; pointer-events: auto; }
+    #lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; }
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ai-badge { background: #f0faf4; border: 1px solid #bee8b1; color: #1f7347; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; padding: 2px 8px; }
+    #config-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 500; align-items: center; justify-content: center; pointer-events: none; }
+    #config-modal.open { display: flex; pointer-events: auto; }
+    .tabs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tabs-scroll::-webkit-scrollbar { display: none; }
+    .receipt-mini { width: 72px; height: 72px; object-fit: cover; border: 1px solid #e5e5e5; }
+    @media (max-width: 768px) {
+      .form-input { font-size: 16px; }
+      .btn { padding: 12px 14px; }
+      .tab-btn { white-space: nowrap; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header style="background:#fff; border-bottom:1px solid #e5e5e5;">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+      <div>
+        <div class="display text-xl" style="color:#212121;">Bayo Bowls</div>
+        <div class="label-sm" style="color:#29925a;">Business Expenses</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="weekly.html" class="btn btn-outline text-xs" style="text-decoration:none;">Weekly Payout</a>
+        <button onclick="openConfig()" class="btn btn-outline text-xs">⚙ Settings</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div style="background:#fff; border-bottom:1px solid #e5e5e5;">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 flex gap-0 tabs-scroll">
+      <button class="tab-btn active" onclick="switchTab('dashboard', this)">Dashboard</button>
+      <button class="tab-btn" onclick="switchTab('expense', this)">Add Expense</button>
+      <button class="tab-btn" onclick="switchTab('income', this)">Add Income</button>
+      <button class="tab-btn" onclick="switchTab('history', this)">History</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+    <!-- DASHBOARD TAB -->
+    <div id="tab-dashboard" class="active">
+      <!-- Summary stats -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div class="stat-card">
+          <div class="label-sm mb-2">This Week</div>
+          <div class="display text-3xl" id="stat-week-expenses">$0.00</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">expenses</div>
+        </div>
+        <div class="stat-card">
+          <div class="label-sm mb-2">This Month</div>
+          <div class="display text-3xl" id="stat-month-expenses">$0.00</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">expenses</div>
+        </div>
+        <div class="stat-card">
+          <div class="label-sm mb-2">Net (Month)</div>
+          <div class="display text-3xl" id="stat-net">$0.00</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">income − expenses</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="card p-6">
+          <div class="label-sm mb-1">Weekly Expenses</div>
+          <div class="divider mb-4"></div>
+          <canvas id="chart-weekly" height="200"></canvas>
+        </div>
+        <div class="card p-6">
+          <div class="label-sm mb-1">Top Stores This Month</div>
+          <div class="divider mb-4"></div>
+          <canvas id="chart-stores" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Recent entries -->
+      <div class="card p-6 mb-6">
+        <div class="label-sm mb-1">Recent Transactions</div>
+        <div class="divider mb-4"></div>
+        <div id="recent-list">
+          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No transactions yet. Add your first expense or income above.</div>
+        </div>
+      </div>
+
+      <!-- Receipt Gallery -->
+      <div class="card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1" style="gap:16px;">
+          <div>
+            <div class="label-sm">Receipt Gallery</div>
+            <div style="font-size:10px; color:#8b8b8b; margin-top:2px;">Files saved as StoreName_Date — tap to enlarge, download to save</div>
+          </div>
+          <input
+            type="text"
+            id="gallery-search"
+            class="form-input"
+            style="width:100%; max-width:220px; font-size:12px; padding:8px 12px;"
+            placeholder="Search store or date…"
+            oninput="renderReceiptGallery(this.value.toLowerCase().trim())"
+          />
+        </div>
+        <div class="divider mb-5"></div>
+        <div id="receipt-gallery" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:12px;">
+          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0; grid-column:1/-1;">No receipts saved yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADD EXPENSE TAB -->
+    <div id="tab-expense">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+        <!-- Receipt Upload -->
+        <div class="card p-6">
+          <div class="label-sm mb-1">Receipt Upload</div>
+          <div class="divider mb-4"></div>
+
+          <div id="upload-zone" class="upload-zone p-8 text-center mb-4" onclick="document.getElementById('receipt-file').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+            <div id="upload-preview" style="display:none;">
+              <div class="label-sm mb-2" style="color:#29925a;">Receipts selected: <span id="receipt-count">0</span></div>
+              <div id="receipt-preview-grid" class="flex flex-wrap gap-2 justify-center"></div>
+            </div>
+            <div id="upload-placeholder">
+              <div style="font-size:32px; margin-bottom:8px;">📄</div>
+              <div style="font-size:12px; color:#8b8b8b; margin-bottom:4px;">Tap to upload one or more receipt photos</div>
+              <div style="font-size:10px; color:#bbb;">or drag & drop multiple · JPG, PNG, HEIC, WebP</div>
+            </div>
+          </div>
+          <input type="file" id="receipt-file" accept="image/*" multiple style="display:none;" onchange="handleFileSelect(event)" />
+
+          <button id="analyze-btn" onclick="analyzeReceipt()" class="btn btn-green w-full" style="display:none;">
+            <span id="analyze-label">Analyze first receipt with AI</span>
+            <span id="analyze-spinner" style="display:none;"><span class="spinner"></span> Analyzing…</span>
+          </button>
+          <div id="ai-result" class="mt-4" style="display:none;"></div>
+        </div>
+
+        <!-- Expense Form -->
+        <div class="card p-6">
+          <div class="label-sm mb-1">Expense Details</div>
+          <div class="divider mb-4"></div>
+
+          <div class="mb-4">
+            <label class="form-label">Store / Vendor</label>
+            <input type="text" id="exp-store" class="form-input" placeholder="e.g. Costco, Walmart" />
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Total Amount ($)</label>
+            <input type="number" id="exp-amount" class="form-input" placeholder="0.00" step="0.01" min="0" />
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Category</label>
+            <select id="exp-category" class="form-input">
+              <option value="">Select category…</option>
+              <option>Ingredients & Food Supplies</option>
+              <option>Packaging</option>
+              <option>Kitchen Equipment</option>
+              <option>Delivery & Transport</option>
+              <option>Marketing</option>
+              <option>Utilities</option>
+              <option>Farmers Market Fees</option>
+              <option>Staff / Labor</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Date</label>
+            <input type="date" id="exp-date" class="form-input" />
+          </div>
+          <div class="mb-6">
+            <label class="form-label">Notes (optional)</label>
+            <textarea id="exp-notes" class="form-input" rows="2" placeholder="Any additional details…"></textarea>
+          </div>
+
+          <button onclick="saveExpense()" class="btn btn-dark w-full">Save Expense</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADD INCOME TAB -->
+    <div id="tab-income">
+      <div class="max-w-lg mx-auto card p-8">
+        <div class="label-sm mb-1">Record Income</div>
+        <div class="divider mb-6"></div>
+
+        <div class="mb-4">
+          <label class="form-label">Source</label>
+          <select id="inc-source" class="form-input">
+            <option value="">Select source…</option>
+            <option>Farmers Market</option>
+            <option>Online Orders</option>
+            <option>Catering</option>
+            <option>Chefs</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Amount ($)</label>
+          <input type="number" id="inc-amount" class="form-input" placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Date</label>
+          <input type="date" id="inc-date" class="form-input" />
+        </div>
+        <div class="mb-6">
+          <label class="form-label">Notes (optional)</label>
+          <textarea id="inc-notes" class="form-input" rows="2" placeholder="e.g. Saturday market, rainy day"></textarea>
+        </div>
+
+        <button onclick="saveIncome()" class="btn btn-green w-full">Save Income</button>
+      </div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div id="tab-history">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6" style="gap:16px;">
+        <div>
+          <div class="label-sm mb-1">Transaction History</div>
+          <div class="divider"></div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full sm:w-auto">
+          <select id="filter-type" class="form-input" style="width:auto;" onchange="renderHistory()">
+            <option value="all">All</option>
+            <option value="expense">Expenses only</option>
+            <option value="income">Income only</option>
+          </select>
+          <select id="filter-period" class="form-input" style="width:auto;" onchange="renderHistory()">
+            <option value="all">All time</option>
+            <option value="week">This week</option>
+            <option value="month">This month</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="history-list">
+          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:48px 0;">No transactions yet.</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" onclick="closeLightbox()">
+    <img id="lightbox-img" src="" alt="Receipt" />
+  </div>
+
+  <!-- Config / Settings Modal -->
+  <div id="config-modal">
+    <div class="card p-8" style="width:100%; max-width:480px;">
+      <div class="label-sm mb-1">Settings</div>
+      <div class="divider mb-6"></div>
+
+      <div class="mb-4">
+        <label class="form-label">Google Gemini API Key</label>
+        <input type="password" id="cfg-gemini-key" class="form-input" placeholder="AIza…" />
+        <div style="font-size:10px; color:#8b8b8b; margin-top:6px;">
+          Get a free key at <a href="https://aistudio.google.com" target="_blank" style="color:#29925a;">aistudio.google.com</a> → Get API Key. Stored locally in your browser only.
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label">Supabase Project URL</label>
+        <input type="text" id="cfg-sb-url" class="form-input" placeholder="https://xxxx.supabase.co" />
+      </div>
+
+      <div class="mb-6">
+        <label class="form-label">Supabase Anon Key</label>
+        <input type="password" id="cfg-sb-key" class="form-input" placeholder="eyJ…" />
+        <div style="font-size:10px; color:#8b8b8b; margin-top:6px;">
+          Find these in your <a href="https://supabase.com/dashboard" target="_blank" style="color:#29925a;">Supabase dashboard</a> → Project Settings → API.
+        </div>
+      </div>
+
+      <div id="cfg-test-result" class="mb-4" style="display:none; font-size:11px; padding:10px 12px; border:1px solid #e5e5e5;"></div>
+
+      <div class="flex gap-3">
+        <button id="cfg-test-btn" onclick="testSupabaseConnection()" class="btn btn-outline flex-1">Test Connection</button>
+        <button onclick="saveConfig()" class="btn btn-green flex-1">Save Settings</button>
+        <button onclick="closeConfig()" class="btn btn-outline flex-1">Cancel</button>
+      </div>
+
+      <div class="mt-6 p-4" style="background:#f7f7f5; border:1px solid #e5e5e5;">
+        <div class="label-sm mb-2">Don't have accounts yet?</div>
+        <div style="font-size:11px; color:#555; line-height:1.8;">
+          1. <a href="https://aistudio.google.com" target="_blank" style="color:#29925a;">aistudio.google.com</a> — Free Gemini API key (Google account required)<br/>
+          2. <a href="https://supabase.com" target="_blank" style="color:#29925a;">supabase.com</a> — Free database + image storage<br/>
+          3. After setup, paste your keys above and hit Save.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
