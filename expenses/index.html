@@ -27,6 +27,8 @@
     .form-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; color: #8b8b8b; display: block; margin-bottom: 6px; }
     .card { background: #fff; border: 1px solid #e5e5e5; }
     .stat-card { background: #fff; border: 1px solid #e5e5e5; padding: 24px; }
+    .stat-card.clickable { cursor: pointer; transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
+    .stat-card.clickable:hover { border-color: #29925a; box-shadow: 0 14px 28px rgba(41, 146, 90, 0.08); transform: translateY(-2px); }
     .divider { width: 32px; height: 2px; background: #29925a; }
     #tab-dashboard, #tab-expense, #tab-history { display: none; }
     #tab-dashboard.active, #tab-expense.active, #tab-history.active { display: block; }
@@ -66,7 +68,6 @@
       </div>
       <div class="flex items-center gap-2">
         <a href="weekly.html" class="btn btn-outline text-xs" style="text-decoration:none;">Weekly Payout</a>
-        <a href="income.html" class="btn btn-outline text-xs" style="text-decoration:none;">Income</a>
         <a href="images.html" class="btn btn-outline text-xs" style="text-decoration:none;">Receipt Images</a>
         <button onclick="openConfig()" class="btn btn-outline text-xs">⚙ Settings</button>
       </div>
@@ -103,15 +104,15 @@
 
       <!-- Summary stats -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <div class="stat-card">
-          <div class="label-sm mb-2">This Week</div>
+        <div class="stat-card clickable" onclick="openExpenseView('week')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openExpenseView('week');}">
+          <div class="label-sm mb-2">Spent This Week</div>
           <div class="display text-3xl" id="stat-week-expenses">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">money spent</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">Tap to see places and transactions</div>
         </div>
-        <div class="stat-card">
-          <div class="label-sm mb-2" id="selected-month-label">Selected Month</div>
-          <div class="display text-3xl" id="stat-month-expenses">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">money spent</div>
+        <div class="stat-card clickable" onclick="openExpenseView('all')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openExpenseView('all');}">
+          <div class="label-sm mb-2">Total Spent</div>
+          <div class="display text-3xl" id="stat-total-expenses">$0.00</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">Tap to see all spending and tally</div>
         </div>
       </div>
 

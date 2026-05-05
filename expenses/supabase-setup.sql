@@ -70,3 +70,7 @@ CREATE POLICY "Public read receipts" ON storage.objects
 DROP POLICY IF EXISTS "Anon upload receipts" ON storage.objects;
 CREATE POLICY "Anon upload receipts" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'receipts');
+
+DROP POLICY IF EXISTS "Anon delete receipts" ON storage.objects;
+CREATE POLICY "Anon delete receipts" ON storage.objects
+  FOR DELETE USING (bucket_id = 'receipts');

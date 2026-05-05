@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bayo Bowls — Spending Details</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Open Sans', sans-serif; color: #212121; background: #f7f7f5; -webkit-font-smoothing: antialiased; }
+    .display { font-family: 'Cormorant Garamond', serif; font-weight: 300; }
+    .label-sm { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; font-weight: 600; color: #8b8b8b; }
+    .card { background: #fff; border: 1px solid #e5e5e5; }
+    .btn { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; padding: 11px 16px; cursor: pointer; border: 1px solid #212121; background: transparent; color: #212121; text-decoration: none; }
+    .btn:hover { background: #212121; color: #fff; }
+    .divider { width: 32px; height: 2px; background: #29925a; }
+    .pill { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding: 4px 8px; border: 1px solid #e5e5e5; color: #777; }
+    .store-chip { border: 1px solid #e5e5e5; background: #fff; padding: 14px; }
+    .store-chip-button { width: 100%; text-align: left; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; }
+    .store-chip-button:hover { border-color: #29925a; box-shadow: 0 12px 24px rgba(41, 146, 90, 0.08); transform: translateY(-1px); }
+    .store-chip-button.active { border-color: #29925a; background: #f0faf4; }
+  </style>
+</head>
+<body>
+  <header style="background:#fff; border-bottom:1px solid #e5e5e5;">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+      <div>
+        <div class="display text-xl">Bayo Bowls</div>
+        <div class="label-sm" style="color:#29925a;">Spending Details</div>
+      </div>
+      <a href="index.html" class="btn">Back To App</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <div class="card p-5 sm:p-6 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between" style="gap:16px;">
+        <div>
+          <div class="label-sm mb-1" id="spending-scope-label">Spent This Week</div>
+          <div class="divider mb-3"></div>
+          <div id="spending-range" style="font-size:13px; color:#666;">-</div>
+        </div>
+        <div class="pill" id="spending-filter-pill">Expense view</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="card p-6">
+        <div class="label-sm mb-2">Running Tally</div>
+        <div class="display text-4xl" id="spending-total">$0.00</div>
+      </div>
+      <div class="card p-6">
+        <div class="label-sm mb-2">Transactions</div>
+        <div class="display text-4xl" id="spending-count">0</div>
+      </div>
+      <div class="card p-6">
+        <div class="label-sm mb-2">Places</div>
+        <div class="display text-4xl" id="spending-places">0</div>
+      </div>
+    </div>
+
+    <div class="card p-5 sm:p-6 mb-6">
+      <div class="label-sm mb-1">Places I Spent Money</div>
+      <div class="divider mb-4"></div>
+      <div id="store-summary-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div style="font-size:12px; color:#8b8b8b; padding:18px 0;">No spending found.</div>
+      </div>
+      <div id="store-filter-bar" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid #f0f0f0; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="font-size:11px; color:#666;">Filtered to <strong id="store-filter-name"></strong></div>
+        <button id="clear-store-filter" type="button" class="btn">Show All Places</button>
+      </div>
+    </div>
+
+    <div class="card p-5 sm:p-6">
+      <div class="label-sm mb-1">Expense Ledger</div>
+      <div class="divider mb-4"></div>
+      <div style="overflow:auto;">
+        <table style="width:100%; border-collapse:collapse; min-width:720px;">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid #e5e5e5;">
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Date</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Place</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Category</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Amount</th>
+              <th style="font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#8b8b8b; padding:10px 8px;">Running Total</th>
+            </tr>
+          </thead>
+          <tbody id="spending-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="spending.js"></script>
+</body>
+</html>

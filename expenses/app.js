@@ -296,6 +296,86 @@ async function saveTransactionReceipts(txId, receiptItems) {
   localSaveReceiptsByTx(receiptsByTxId);
 }
 
+function rebuildKnownReceiptHashes() {
+  knownReceiptHashes = new Set();
+  Object.values(receiptsByTxId).forEach((items) => {
+    items.forEach((item) => {
+      if (item.hash) knownReceiptHashes.add(item.hash);
+    });
+  });
+}
+
+function getReceiptStoragePath(item) {
+  const rawName = String(item?.name || '').trim();
+  if (rawName) {
+    return rawName.startsWith('receipts/') ? rawName : `receipts/${rawName}`;
+  }
+
+  const rawUrl = String(item?.url || '').trim();
+  if (!rawUrl || rawUrl.startsWith('data:')) return '';
+
+  try {
+    const url = new URL(rawUrl);
+    const marker = '/storage/v1/object/public/receipts/';
+    const idx = url.pathname.indexOf(marker);
+    if (idx >= 0) {
+      return `receipts/${decodeURIComponent(url.pathname.slice(idx + marker.length))}`;
+    }
+  } catch (_) {
+    return '';
+  }
+
+  return '';
+}
+
+async function deleteTransaction(txId) {
+  const tx = transactions.find((item) => item.id === txId);
+  if (!tx) {
+    showToast('Transaction not found');
+    return;
+  }
+
+  const confirmed = window.confirm(`Delete ${tx.store || tx.source || 'this transaction'} and its receipt photos?`);
+  if (!confirmed) return;
+
+  const receiptItems = getReceiptItemsForTransaction(tx);
+
+  if (sbClient) {
+    const storagePaths = receiptItems
+      .map((item) => getReceiptStoragePath(item))
+      .filter(Boolean);
+
+    if (storagePaths.length) {
+      const { error: storageError } = await sbClient.storage.from('receipts').remove(storagePaths);
+      if (storageError) {
+        showToast('Delete failed: add Supabase delete policy for receipt storage');
+        return;
+      }
+    }
+
+    const { error } = await sbClient.from('transactions').delete().eq('id', txId);
+    if (error) {
+      showToast('Delete failed: ' + error.message);
+      return;
+    }
+
+    await loadAllData();
+    renderReceiptGallery();
+    showToast('Transaction deleted');
+    return;
+  }
+
+  transactions = transactions.filter((item) => item.id !== txId);
+  delete receiptsByTxId[txId];
+  rebuildKnownReceiptHashes();
+  localSave(transactions);
+  localSaveReceiptsByTx(receiptsByTxId);
+  renderDashboard();
+  renderHistory();
+  renderReceiptGallery();
+  showToast('Transaction deleted');
+}
+
 // ─── Receipt image storage ────────────────────────────────────────────────────
 let currentReceiptFiles = [];
 let currentReceiptDataUrls = [];
@@ -304,20 +384,78 @@ function sanitizeForFilename(str) {
   return str.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
 }
 
-async function uploadReceiptImage(file, txId, store, date) {
+function getReceiptFileFingerprint(file) {
+  return [
+    file.name || '',
+    file.size || 0,
+    file.lastModified || 0,
+    file.type || ''
+  ].join('::');
+}
+
+function dedupeReceiptFiles(files) {
+  const seen = new Set();
+  const uniqueFiles = [];
+  let skippedCount = 0;
+
+  files.forEach((file) => {
+    const fingerprint = getReceiptFileFingerprint(file);
+    if (seen.has(fingerprint)) {
+      skippedCount += 1;
+      return;
+    }
+
+    seen.add(fingerprint);
+    uniqueFiles.push(file);
+  });
+
+  return { uniqueFiles, skippedCount };
+}
+
+async function filterDuplicateReceiptFiles(files) {
+  const { uniqueFiles, skippedCount: fingerprintSkippedCount } = dedupeReceiptFiles(files);
+  const acceptedFiles = [];
+  const acceptedHashes = new Set();
+  let hashSkippedCount = 0;
+
+  for (const file of uniqueFiles) {
+    let hash = '';
+    try {
+      hash = await computeFileSha256(file);
+    } catch (_) {
+      hash = '';
+    }
+
+    if (hash && (acceptedHashes.has(hash) || knownReceiptHashes.has(hash))) {
+      hashSkippedCount += 1;
+      continue;
+    }
+
+    if (hash) acceptedHashes.add(hash);
+    acceptedFiles.push(file);
+  }
+
+  return {
+    uniqueFiles: acceptedFiles,
+    skippedCount: fingerprintSkippedCount + hashSkippedCount
+  };
+}
+
+async function uploadReceiptImage(file, txId, store, date, receiptIndex, hash) {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
   const safeName = sanitizeForFilename(store || 'Receipt');
   const safeDate = (date || new Date().toISOString().split('T')[0]);
   const shortId  = txId.slice(0, 8);
-  const filename = `${safeName}_${safeDate}_${shortId}.${ext}`;
+  const baseFileName = sanitizeForFilename((file.name || '').replace(/\.[^.]+$/, '')) || 'receipt';
+  const uniqueSuffix = hash ? hash.slice(0, 12) : String(receiptIndex + 1).padStart(2, '0');
+  const filename = `${safeName}_${safeDate}_${shortId}_${String(receiptIndex + 1).padStart(2, '0')}_${baseFileName}_${uniqueSuffix}.${ext}`;
 
   if (!sbClient) {
-    const idx = currentReceiptFiles.indexOf(file);
-    const url = idx >= 0 ? currentReceiptDataUrls[idx] : '';
+    const url = currentReceiptDataUrls[receiptIndex] || '';
     return { url, name: filename, hash: '' };
   }
   const path = `receipts/${filename}`;
-  const { error } = await sbClient.storage.from('receipts').upload(path, file, { upsert: true });
+  const { error } = await sbClient.storage.from('receipts').upload(path, file, { upsert: false });
   if (error) { console.warn('Image upload failed:', error.message); return null; }
   const { data } = sbClient.storage.from('receipts').getPublicUrl(path);
   return { url: data.publicUrl, name: filename, hash: '' };
@@ -356,9 +494,25 @@ function handleDrop(event) {
   if (files.length) loadReceiptFiles(files);
 }
 
-function loadReceiptFiles(files) {
-  currentReceiptFiles = files.slice(0, 10);
+async function loadReceiptFiles(files) {
+  const { uniqueFiles, skippedCount } = await filterDuplicateReceiptFiles(files);
+  currentReceiptFiles = uniqueFiles.slice(0, 10);
   currentReceiptDataUrls = [];
+
+  if (skippedCount) {
+    const label = skippedCount === 1 ? 'duplicate image' : 'duplicate images';
+    showToast(`Skipped ${skippedCount} ${label}`);
+  }
+
+  if (!currentReceiptFiles.length) {
+    document.getElementById('upload-preview').style.display = 'none';
+    document.getElementById('upload-placeholder').style.display = 'block';
+    document.getElementById('receipt-preview-grid').innerHTML = '';
+    document.getElementById('receipt-count').textContent = '0';
+    document.getElementById('analyze-btn').style.display = 'none';
+    document.getElementById('ai-result').style.display = 'none';
+    return;
+  }
 
   function readFileAsDataURL(file) {
     return new Promise((resolve, reject) => {
@@ -618,7 +772,7 @@ async function saveExpense() {
   const batchHashes = new Set();
   const txId = crypto.randomUUID();
   if (currentReceiptFiles.length) {
-    for (const file of currentReceiptFiles) {
+    for (const [receiptIndex, file] of currentReceiptFiles.entries()) {
       let hash = '';
       try {
         hash = await computeFileSha256(file);
@@ -632,7 +786,7 @@ async function saveExpense() {
       }
       if (hash) batchHashes.add(hash);
 
-      const uploaded = await uploadReceiptImage(file, txId, store, date);
+      const uploaded = await uploadReceiptImage(file, txId, store, date, receiptIndex, hash);
       if (!uploaded) continue;
       if (typeof uploaded === 'string') {
         receiptItems.push({ url: uploaded, name: '', hash });
@@ -738,6 +892,11 @@ function toDate(dateInput) {
 
 function fmt(n) { return '$' + Math.abs(n).toFixed(2); }
 
+function openExpenseView(scope) {
+  const normalizedScope = scope === 'week' ? 'week' : 'all';
+  window.location.href = `spending.html?scope=${normalizedScope}`;
+}
+
 function renderDashboard() {
   const now = new Date();
   const week  = getWeekBounds(now);
@@ -750,13 +909,10 @@ function renderDashboard() {
   const sumAmt = arr => arr.reduce((s, t) => s + parseFloat(t.amount), 0);
 
   const weekExpTotal  = sumAmt(weekExpenses);
-  const monthExpTotal = sumAmt(monthExpenses);
+  const totalExpTotal = sumAmt(transactions.filter(t => t.type === 'expense'));
 
   document.getElementById('stat-week-expenses').textContent  = fmt(weekExpTotal);
-  document.getElementById('stat-month-expenses').textContent = fmt(monthExpTotal);
-  const monthLabel = month.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  const monthLabelEl = document.getElementById('selected-month-label');
-  if (monthLabelEl) monthLabelEl.textContent = monthLabel;
+  document.getElementById('stat-total-expenses').textContent = fmt(totalExpTotal);
 
   populateMonthSelect();
   renderWeeklyChart();
@@ -777,7 +933,6 @@ function renderWeeklyChart() {
   // Last 6 weeks
   const weeks = [];
   const expTotals = [];
-  const incTotals = [];
   const now = new Date();
 
   for (let i = 5; i >= 0; i--) {
@@ -788,9 +943,7 @@ function renderWeeklyChart() {
     weeks.push(label);
 
     const exps = transactions.filter(t => t.type === 'expense' && inRange(t.date, bounds));
-    const incs = transactions.filter(t => t.type === 'income'  && inRange(t.date, bounds));
     expTotals.push(exps.reduce((s, t) => s + parseFloat(t.amount), 0));
-    incTotals.push(incs.reduce((s, t) => s + parseFloat(t.amount), 0));
   }
 
   if (chartWeekly) chartWeekly.destroy();
@@ -800,7 +953,6 @@ function renderWeeklyChart() {
       labels: weeks,
       datasets: [
         { label: 'Expenses', data: expTotals, backgroundColor: '#212121' },
-        { label: 'Income',   data: incTotals, backgroundColor: '#29925a' },
       ]
     },
     options: {
@@ -934,14 +1086,20 @@ function transactionRow(t, full = false) {
   const amtColor = '#e53e3e';
   const amtPrefix = '−';
   const dateStr = new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const actionHtml = full
+    ? `<button onclick="event.stopPropagation(); deleteTransaction('${escHtml(t.id || '')}')" style="display:inline-flex; align-items:center; justify-content:center; min-width:88px; border:1px solid #f5a3a3; background:#fff1f1; color:#b42318; font-size:10px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; padding:9px 12px; cursor:pointer;">Delete</button>`
+    : '';
 
   return `
-    <div class="flex items-center gap-4 p-4" style="border-bottom:1px solid #f0f0f0;">
-      <div style="flex:1; min-width:0;">
+    <div class="flex flex-wrap items-center gap-3 p-4" style="border-bottom:1px solid #f0f0f0;">
+      <div style="flex:1 1 220px; min-width:0;">
         <div style="font-size:13px; font-weight:600; color:#212121;">${escHtml(t.store || t.source || '')}</div>
         <div style="font-size:10px; color:#8b8b8b; letter-spacing:1px; text-transform:uppercase; margin-top:2px;">${dateStr}</div>
       </div>
-      <div style="font-size:16px; font-weight:600; color:${amtColor}; white-space:nowrap;">${amtPrefix}$${parseFloat(t.amount).toFixed(2)}</div>
+      <div style="display:flex; align-items:center; gap:12px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end;">
+        <div style="font-size:16px; font-weight:600; color:${amtColor}; white-space:nowrap;">${amtPrefix}$${parseFloat(t.amount).toFixed(2)}</div>
+        ${actionHtml}
+      </div>
     </div>`;
 }
 
