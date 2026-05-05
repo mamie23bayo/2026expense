@@ -433,15 +433,8 @@ async function analyzeReceipt() {
   document.getElementById('analyze-btn').disabled = true;
 
   try {
-    const results = [];
-    const errors = [];
-
-    // Analyze all receipts
-    for (let idx = 0; idx < currentReceiptFiles.length; idx++) {
-      const base64 = currentReceiptDataUrls[idx].split(',')[1];
-      const mimeType = currentReceiptFiles[idx].type || 'image/jpeg';
-
-      const prompt = `You are a receipt scanner. Analyze this receipt image and return ONLY a valid JSON object with exactly these fields:
+    const modelsToTry = await getGeminiModelsToTry(cfg.gemini);
+    const prompt = `You are a receipt scanner. Analyze this receipt image and return ONLY a valid JSON object with exactly these fields:
 {
   "store": "store or vendor name",
   "total": 0.00,
@@ -454,63 +447,71 @@ Rules:
 - "items" is a short array of line items (max 8)
 - Do NOT include any text outside the JSON object`;
 
-      const modelsToTry = await getGeminiModelsToTry(cfg.gemini);
-      let data = null;
-      let lastErrorMessage = '';
+    // Analyze all receipts in parallel
+    const analyzeOne = async (idx) => {
+      try {
+        const base64 = currentReceiptDataUrls[idx].split(',')[1];
+        const mimeType = currentReceiptFiles[idx].type || 'image/jpeg';
 
-      for (const model of modelsToTry) {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.gemini}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: prompt },
-                  { inline_data: { mime_type: mimeType, data: base64 } }
-                ]
-              }]
-            })
+        let data = null;
+        let lastErrorMessage = '';
+
+        for (const model of modelsToTry) {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.gemini}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: mimeType, data: base64 } }
+                  ]
+                }]
+              })
+            }
+          );
+
+          if (response.ok) {
+            data = await response.json();
+            break;
           }
-        );
 
-        if (response.ok) {
-          data = await response.json();
-          break;
+          const err = await response.json();
+          lastErrorMessage = err.error?.message || 'API error';
         }
 
-        const err = await response.json();
-        lastErrorMessage = err.error?.message || 'API error';
-      }
+        if (!data) {
+          throw new Error(lastErrorMessage || 'Gemini API request failed');
+        }
 
-      if (!data) {
-        errors.push(`Receipt ${idx + 1}: ${lastErrorMessage || 'Gemini API request failed'}`);
-        continue;
-      }
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('Could not parse AI response');
 
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-      // Extract JSON from the response
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        errors.push(`Receipt ${idx + 1}: Could not parse AI response`);
-        continue;
+        return JSON.parse(jsonMatch[0]);
+      } catch (err) {
+        throw new Error(`Receipt ${idx + 1}: ${err.message}`);
       }
+    };
 
-      try {
-        const result = JSON.parse(jsonMatch[0]);
-        results.push(result);
-      } catch (parseErr) {
-        errors.push(`Receipt ${idx + 1}: ${parseErr.message}`);
-      }
+    const results = await Promise.allSettled(
+      Array.from({ length: currentReceiptFiles.length }, (_, idx) => analyzeOne(idx))
+    );
+
+    const analyzed = results
+      .map((r, idx) => (r.status === 'fulfilled' ? r.value : null))
+      .filter(Boolean);
+
+    if (!analyzed.length) {
+      const errors = results
+        .map((r, idx) => r.status === 'rejected' ? r.reason.message : null)
+        .filter(Boolean);
+      throw new Error(errors[0] || 'No receipts could be analyzed');
     }
 
-    if (!results.length) {
-      throw new Error(errors.length ? errors[0] : 'No receipts could be analyzed');
-    }
-
-    const result = results[0];
+    const result = analyzed[0];
 
     // Auto-fill the form with first receipt
     if (result.store) document.getElementById('exp-store').value = result.store;
@@ -526,8 +527,8 @@ Rules:
       ? `<div style="margin-top:8px;"><div class="label-sm mb-1">Items Found</div>${result.items.map(i => `<div style="font-size:11px; color:#555; padding:2px 0; border-bottom:1px solid #f0f0f0;">${i}</div>`).join('')}</div>`
       : '';
 
-    const multiReceiptNote = results.length > 1
-      ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e5e5e5; font-size:10px; color:#8b8b8b;">${results.length} receipts analyzed. First receipt auto-filled; you can edit details before saving.</div>`
+    const multiReceiptNote = analyzed.length > 1
+      ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e5e5e5; font-size:10px; color:#8b8b8b;">${analyzed.length} receipts analyzed. First receipt auto-filled; you can edit details before saving.</div>`
       : '';
 
     document.getElementById('ai-result').innerHTML = `
@@ -542,7 +543,7 @@ Rules:
         ${multiReceiptNote}
       </div>`;
     document.getElementById('ai-result').style.display = 'block';
-    const toastMsg = results.length > 1 ? `${results.length} receipts analyzed — form filled with first` : 'Receipt analyzed — form filled in';
+    const toastMsg = analyzed.length > 1 ? `${analyzed.length} receipts analyzed — form filled with first` : 'Receipt analyzed — form filled in';
     showToast(toastMsg);
 
   } catch (err) {
