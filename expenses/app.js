@@ -1012,7 +1012,7 @@ function renderRecent() {
     list.innerHTML = '<div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No expenses yet.</div>';
     return;
   }
-  list.innerHTML = recent.map(t => transactionRow(t)).join('');
+  list.innerHTML = recent.map(t => transactionRow(t, true)).join('');
 }
 
 function renderReceiptGallery(searchTerm = '') {
