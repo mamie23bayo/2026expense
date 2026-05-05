@@ -411,6 +411,13 @@ async function getGeminiModelsToTry(apiKey) {
 }
 
 // ─── Gemini AI Receipt Analysis ───────────────────────────────────────────────
+function isEquipmentStore(store) {
+  if (!store) return false;
+  const s = store.toLowerCase();
+  const equipmentStores = ['amazon', 'tj maxx', 'tj.maxx', 'tjmaxx', 'marshalls', 'home depot', 'homedepot', "lowe's", 'lowes'];
+  return equipmentStores.some(es => s.includes(es));
+}
+
 async function analyzeReceipt() {
   const cfg = getConfig();
   if (!cfg.gemini) {
@@ -426,11 +433,15 @@ async function analyzeReceipt() {
   document.getElementById('analyze-btn').disabled = true;
 
   try {
-    // Convert file to base64 (strip the data:... prefix)
-    const base64 = currentReceiptDataUrls[0].split(',')[1];
-    const mimeType = currentReceiptFiles[0].type || 'image/jpeg';
+    const results = [];
+    const errors = [];
 
-    const prompt = `You are a receipt scanner. Analyze this receipt image and return ONLY a valid JSON object with exactly these fields:
+    // Analyze all receipts
+    for (let idx = 0; idx < currentReceiptFiles.length; idx++) {
+      const base64 = currentReceiptDataUrls[idx].split(',')[1];
+      const mimeType = currentReceiptFiles[idx].type || 'image/jpeg';
+
+      const prompt = `You are a receipt scanner. Analyze this receipt image and return ONLY a valid JSON object with exactly these fields:
 {
   "store": "store or vendor name",
   "total": 0.00,
@@ -443,55 +454,80 @@ Rules:
 - "items" is a short array of line items (max 8)
 - Do NOT include any text outside the JSON object`;
 
-    const modelsToTry = await getGeminiModelsToTry(cfg.gemini);
-    let data = null;
-    let lastErrorMessage = '';
+      const modelsToTry = await getGeminiModelsToTry(cfg.gemini);
+      let data = null;
+      let lastErrorMessage = '';
 
-    for (const model of modelsToTry) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.gemini}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: mimeType, data: base64 } }
-              ]
-            }]
-          })
+      for (const model of modelsToTry) {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.gemini}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: prompt },
+                  { inline_data: { mime_type: mimeType, data: base64 } }
+                ]
+              }]
+            })
+          }
+        );
+
+        if (response.ok) {
+          data = await response.json();
+          break;
         }
-      );
 
-      if (response.ok) {
-        data = await response.json();
-        break;
+        const err = await response.json();
+        lastErrorMessage = err.error?.message || 'API error';
       }
 
-      const err = await response.json();
-      lastErrorMessage = err.error?.message || 'API error';
+      if (!data) {
+        errors.push(`Receipt ${idx + 1}: ${lastErrorMessage || 'Gemini API request failed'}`);
+        continue;
+      }
+
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Extract JSON from the response
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        errors.push(`Receipt ${idx + 1}: Could not parse AI response`);
+        continue;
+      }
+
+      try {
+        const result = JSON.parse(jsonMatch[0]);
+        results.push(result);
+      } catch (parseErr) {
+        errors.push(`Receipt ${idx + 1}: ${parseErr.message}`);
+      }
     }
 
-    if (!data) {
-      throw new Error(lastErrorMessage || 'Gemini API request failed');
+    if (!results.length) {
+      throw new Error(errors.length ? errors[0] : 'No receipts could be analyzed');
     }
 
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const result = results[0];
 
-    // Extract JSON from the response
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Could not parse AI response');
-    const result = JSON.parse(jsonMatch[0]);
-
-    // Auto-fill the form
+    // Auto-fill the form with first receipt
     if (result.store) document.getElementById('exp-store').value = result.store;
     if (result.total) document.getElementById('exp-amount').value = parseFloat(result.total).toFixed(2);
     if (result.date)  document.getElementById('exp-date').value  = result.date;
 
-    // Show result summary
+    // Auto-set category based on store
+    const category = isEquipmentStore(result.store) ? 'Kitchen Equipment' : 'Ingredients & Food Supplies';
+    document.getElementById('exp-category').value = category;
+
+    // Show result summary with multi-receipt info
     const itemsHtml = result.items && result.items.length
       ? `<div style="margin-top:8px;"><div class="label-sm mb-1">Items Found</div>${result.items.map(i => `<div style="font-size:11px; color:#555; padding:2px 0; border-bottom:1px solid #f0f0f0;">${i}</div>`).join('')}</div>`
+      : '';
+
+    const multiReceiptNote = results.length > 1
+      ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #e5e5e5; font-size:10px; color:#8b8b8b;">${results.length} receipts analyzed. First receipt auto-filled; you can edit details before saving.</div>`
       : '';
 
     document.getElementById('ai-result').innerHTML = `
@@ -501,10 +537,13 @@ Rules:
           <span style="font-size:11px; color:#1f7347;">Form auto-filled ✓</span>
         </div>
         <div style="font-size:12px; color:#212121;"><strong>${result.store || 'Unknown store'}</strong> — $${parseFloat(result.total || 0).toFixed(2)}</div>
+        <div style="font-size:10px; color:#1f7347; margin-top:4px;">Category: <strong>${category}</strong></div>
         ${itemsHtml}
+        ${multiReceiptNote}
       </div>`;
     document.getElementById('ai-result').style.display = 'block';
-    showToast('Receipt analyzed — form filled in');
+    const toastMsg = results.length > 1 ? `${results.length} receipts analyzed — form filled with first` : 'Receipt analyzed — form filled in';
+    showToast(toastMsg);
 
   } catch (err) {
     const errText = String(err.message || '');
