@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bayo Bowls - Income Entry</title>
+  <title>Bayo Bowls - Weekly Income Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
@@ -30,42 +30,105 @@
     <div class="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
       <div>
         <div class="display text-xl">Bayo Bowls</div>
-        <div class="label-sm" style="color:#29925a;">Income Entry</div>
+        <div class="label-sm" style="color:#29925a;">Weekly Income Tracker</div>
       </div>
-      <a href="index.html" class="btn btn-outline">Back To Dashboard</a>
+      <div class="flex items-center gap-2">
+        <a href="weekly.html" class="btn btn-outline">Weekly Payout</a>
+        <a href="index.html" class="btn btn-outline">Back To Dashboard</a>
+      </div>
     </div>
   </header>
 
   <main class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-    <div class="card p-8">
-      <div class="label-sm mb-1">Record Monthly Income</div>
-      <div class="divider mb-6"></div>
+    <div class="card p-6 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between" style="gap:16px;">
+        <div>
+          <div class="label-sm mb-1">Track Income By Date</div>
+          <div class="divider mb-3"></div>
+          <div id="income-range-label" style="font-size:13px; color:#666;">This week</div>
+        </div>
+        <div style="font-size:11px; color:#8b8b8b; max-width:320px;">Use this page to manually log weekly income, review monthly totals, and search every income entry.</div>
+      </div>
+    </div>
 
-      <div class="mb-4">
-        <label class="form-label">Source</label>
-        <select id="inc-source" class="form-input">
-          <option value="">Select source...</option>
-          <option>Farmers Market</option>
-          <option>Online Orders</option>
-          <option>Catering</option>
-          <option>Chefs</option>
-          <option>Other</option>
-        </select>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="card p-6">
+        <div class="label-sm mb-2">Income This Week</div>
+        <div class="display text-4xl" id="income-week-total">$0.00</div>
       </div>
-      <div class="mb-4">
-        <label class="form-label">Amount ($)</label>
-        <input type="number" id="inc-amount" class="form-input" placeholder="0.00" step="0.01" min="0" />
+      <div class="card p-6">
+        <div class="label-sm mb-2">Income This Month</div>
+        <div class="display text-4xl" id="income-month-total">$0.00</div>
       </div>
-      <div class="mb-4">
-        <label class="form-label">Date</label>
-        <input type="date" id="inc-date" class="form-input" />
+      <div class="card p-6">
+        <div class="label-sm mb-2">Total Income</div>
+        <div class="display text-4xl" id="income-all-total">$0.00</div>
       </div>
-      <div class="mb-6">
-        <label class="form-label">Notes (optional)</label>
-        <textarea id="inc-notes" class="form-input" rows="3" placeholder="e.g. May market payout"></textarea>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-8">
+        <div class="label-sm mb-1">Record Weekly Income</div>
+        <div class="divider mb-6"></div>
+
+        <div class="mb-4">
+          <label class="form-label">Source</label>
+          <select id="inc-source" class="form-input">
+            <option value="">Select source...</option>
+            <option>Farmers Market</option>
+            <option>Online Orders</option>
+            <option>Catering</option>
+            <option>Chefs</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Amount ($)</label>
+          <input type="number" id="inc-amount" class="form-input" placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Date</label>
+          <input type="date" id="inc-date" class="form-input" />
+        </div>
+        <div class="mb-6">
+          <label class="form-label">Notes (optional)</label>
+          <textarea id="inc-notes" class="form-input" rows="3" placeholder="e.g. Saturday market cash-out"></textarea>
+        </div>
+
+        <button onclick="saveIncomeOnly()" class="btn btn-green w-full">Save Income</button>
       </div>
 
-      <button onclick="saveIncomeOnly()" class="btn btn-green w-full">Save Income</button>
+      <div class="card p-8">
+        <div class="label-sm mb-1">Find Income Entries</div>
+        <div class="divider mb-6"></div>
+
+        <div class="mb-4">
+          <label class="form-label">Search</label>
+          <input id="income-search" class="form-input" placeholder="Search source, date, or notes..." oninput="renderIncomeTracker()" />
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Time Period</label>
+          <select id="income-scope" class="form-input" onchange="renderIncomeTracker()">
+            <option value="week">This week</option>
+            <option value="month">This month</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Source Filter</label>
+          <select id="income-source-filter" class="form-input" onchange="renderIncomeTracker()">
+            <option value="all">All sources</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-6">
+      <div class="label-sm mb-1">Income Ledger</div>
+      <div class="divider mb-4"></div>
+      <div id="income-list">
+        <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No income entries yet.</div>
+      </div>
     </div>
   </main>
 

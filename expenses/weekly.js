@@ -135,7 +135,7 @@ function renderChart(rows) {
       labels,
       datasets: [
         {
-          label: 'Net',
+          label: 'Projected Payout',
           data: netData,
           borderColor: '#212121',
           backgroundColor: 'rgba(33,33,33,0.1)',

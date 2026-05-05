@@ -892,6 +892,17 @@ function toDate(dateInput) {
 
 function fmt(n) { return '$' + Math.abs(n).toFixed(2); }
 
+function setNetText(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = `${value >= 0 ? '+' : '-'}${fmt(value)}`;
+  el.style.color = value >= 0 ? '#29925a' : '#e53e3e';
+}
+
+function sumTransactions(items) {
+  return items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
 function openExpenseView(scope) {
   const normalizedScope = scope === 'week' ? 'week' : 'all';
   window.location.href = `spending.html?scope=${normalizedScope}`;
@@ -904,15 +915,29 @@ function renderDashboard() {
   const month = getMonthBounds(selectedMonth);
 
   const weekExpenses  = transactions.filter(t => t.type === 'expense' && inRange(t.date, week));
+  const weekIncome    = transactions.filter(t => t.type === 'income' && inRange(t.date, week));
   const monthExpenses = transactions.filter(t => t.type === 'expense' && inRange(t.date, month));
+  const monthIncome   = transactions.filter(t => t.type === 'income' && inRange(t.date, month));
+  const allExpenses   = transactions.filter(t => t.type === 'expense');
+  const allIncome     = transactions.filter(t => t.type === 'income');
 
-  const sumAmt = arr => arr.reduce((s, t) => s + parseFloat(t.amount), 0);
-
-  const weekExpTotal  = sumAmt(weekExpenses);
-  const totalExpTotal = sumAmt(transactions.filter(t => t.type === 'expense'));
+  const weekExpTotal   = sumTransactions(weekExpenses);
+  const weekIncomeTotal = sumTransactions(weekIncome);
+  const monthExpTotal  = sumTransactions(monthExpenses);
+  const monthIncomeTotal = sumTransactions(monthIncome);
+  const totalExpTotal  = sumTransactions(allExpenses);
+  const totalIncomeTotal = sumTransactions(allIncome);
 
   document.getElementById('stat-week-expenses').textContent  = fmt(weekExpTotal);
+  document.getElementById('stat-week-income').textContent = fmt(weekIncomeTotal);
+  document.getElementById('stat-month-expenses').textContent = fmt(monthExpTotal);
+  document.getElementById('stat-month-income').textContent = fmt(monthIncomeTotal);
   document.getElementById('stat-total-expenses').textContent = fmt(totalExpTotal);
+  document.getElementById('stat-total-income').textContent = fmt(totalIncomeTotal);
+
+  setNetText('stat-week-net', weekIncomeTotal - weekExpTotal);
+  setNetText('stat-month-net', monthIncomeTotal - monthExpTotal);
+  setNetText('stat-total-net', totalIncomeTotal - totalExpTotal);
 
   populateMonthSelect();
   renderWeeklyChart();
@@ -933,6 +958,7 @@ function renderWeeklyChart() {
   // Last 6 weeks
   const weeks = [];
   const expTotals = [];
+  const incomeTotals = [];
   const now = new Date();
 
   for (let i = 5; i >= 0; i--) {
@@ -943,7 +969,9 @@ function renderWeeklyChart() {
     weeks.push(label);
 
     const exps = transactions.filter(t => t.type === 'expense' && inRange(t.date, bounds));
+    const income = transactions.filter(t => t.type === 'income' && inRange(t.date, bounds));
     expTotals.push(exps.reduce((s, t) => s + parseFloat(t.amount), 0));
+    incomeTotals.push(income.reduce((s, t) => s + parseFloat(t.amount), 0));
   }
 
   if (chartWeekly) chartWeekly.destroy();
@@ -953,6 +981,7 @@ function renderWeeklyChart() {
       labels: weeks,
       datasets: [
         { label: 'Expenses', data: expTotals, backgroundColor: '#212121' },
+        { label: 'Income', data: incomeTotals, backgroundColor: '#29925a' },
       ]
     },
     options: {
@@ -1007,9 +1036,9 @@ function renderStoresChart() {
 
 function renderRecent() {
   const list = document.getElementById('recent-list');
-  const recent = transactions.filter(t => t.type === 'expense').slice(0, 8);
+  const recent = transactions.slice(0, 8);
   if (!recent.length) {
-    list.innerHTML = '<div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No expenses yet.</div>';
+    list.innerHTML = '<div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No transactions yet.</div>';
     return;
   }
   list.innerHTML = recent.map(t => transactionRow(t, true)).join('');
@@ -1063,14 +1092,23 @@ function renderReceiptGallery(searchTerm = '') {
 // ─── History rendering ────────────────────────────────────────────────────────
 function renderHistory() {
   const period = document.getElementById('filter-period')?.value || 'all';
+  const type = document.getElementById('filter-type')?.value || 'all';
+  const search = (document.getElementById('filter-search')?.value || '').trim().toLowerCase();
   const now    = new Date();
   const weekB  = getWeekBounds(now);
   const monthB = getMonthBounds(selectedMonth || now);
 
   let filtered = transactions.filter(t => {
-    if (t.type !== 'expense') return false;
+    if (type !== 'all' && t.type !== type) return false;
     if (period === 'week'  && !inRange(t.date, weekB))  return false;
     if (period === 'selected-month' && !inRange(t.date, monthB)) return false;
+    if (search) {
+      const haystack = [t.store, t.source, t.category, t.notes, t.date, t.type]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
     return true;
   });
 
@@ -1083,9 +1121,12 @@ function renderHistory() {
 }
 
 function transactionRow(t, full = false) {
-  const amtColor = '#e53e3e';
-  const amtPrefix = '−';
+  const isIncome = t.type === 'income';
+  const amtColor = isIncome ? '#29925a' : '#e53e3e';
+  const amtPrefix = isIncome ? '+' : '−';
   const dateStr = new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const typeLabel = isIncome ? 'Income' : 'Expense';
+  const detailLabel = t.category || typeLabel;
   const actionHtml = full
     ? `<button onclick="event.stopPropagation(); deleteTransaction('${escHtml(t.id || '')}')" style="display:inline-flex; align-items:center; justify-content:center; min-width:88px; border:1px solid #f5a3a3; background:#fff1f1; color:#b42318; font-size:10px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; padding:9px 12px; cursor:pointer;">Delete</button>`
     : '';
@@ -1094,7 +1135,7 @@ function transactionRow(t, full = false) {
     <div class="flex flex-wrap items-center gap-3 p-4" style="border-bottom:1px solid #f0f0f0;">
       <div style="flex:1 1 220px; min-width:0;">
         <div style="font-size:13px; font-weight:600; color:#212121;">${escHtml(t.store || t.source || '')}</div>
-        <div style="font-size:10px; color:#8b8b8b; letter-spacing:1px; text-transform:uppercase; margin-top:2px;">${dateStr}</div>
+        <div style="font-size:10px; color:#8b8b8b; letter-spacing:1px; text-transform:uppercase; margin-top:2px;">${dateStr} · ${escHtml(typeLabel)} · ${escHtml(detailLabel)}</div>
       </div>
       <div style="display:flex; align-items:center; gap:12px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end;">
         <div style="font-size:16px; font-weight:600; color:${amtColor}; white-space:nowrap;">${amtPrefix}$${parseFloat(t.amount).toFixed(2)}</div>
@@ -1107,24 +1148,23 @@ function populateMonthSelect() {
   const el = document.getElementById('month-select');
   if (!el) return;
 
-  const expenseMonths = Array.from(new Set(
+  const transactionMonths = Array.from(new Set(
     transactions
-      .filter((t) => t.type === 'expense')
       .map((t) => getMonthKey(t.date))
       .filter(Boolean)
   )).sort((a, b) => b.localeCompare(a));
 
   const current = getMonthKey(new Date());
-  if (!expenseMonths.includes(current)) expenseMonths.unshift(current);
+  if (!transactionMonths.includes(current)) transactionMonths.unshift(current);
 
-  el.innerHTML = expenseMonths.map((key) => {
+  el.innerHTML = transactionMonths.map((key) => {
     const d = new Date(key + '-01T00:00:00');
     const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     return `<option value="${key}">${label}</option>`;
   }).join('');
 
-  if (!selectedMonth || !expenseMonths.includes(selectedMonth)) {
-    selectedMonth = expenseMonths[0] || current;
+  if (!selectedMonth || !transactionMonths.includes(selectedMonth)) {
+    selectedMonth = transactionMonths[0] || current;
   }
   el.value = selectedMonth;
 }

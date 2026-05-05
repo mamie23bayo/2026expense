@@ -67,6 +67,7 @@
         <div class="label-sm" style="color:#29925a;">Business Expenses</div>
       </div>
       <div class="flex items-center gap-2">
+        <a href="income.html" class="btn btn-outline text-xs" style="text-decoration:none;">Weekly Income</a>
         <a href="weekly.html" class="btn btn-outline text-xs" style="text-decoration:none;">Weekly Payout</a>
         <a href="images.html" class="btn btn-outline text-xs" style="text-decoration:none;">Receipt Images</a>
         <button onclick="openConfig()" class="btn btn-outline text-xs">⚙ Settings</button>
@@ -93,7 +94,7 @@
           <div>
             <div class="label-sm mb-1">Month View</div>
             <div class="divider mb-2"></div>
-            <div style="font-size:12px; color:#8b8b8b;">Pick any month to see total spent and store breakdown.</div>
+            <div style="font-size:12px; color:#8b8b8b;">Pick any month to compare income and expenses alongside your store breakdown.</div>
           </div>
           <div style="width:100%; max-width:260px;">
             <label class="form-label">Selected Month</label>
@@ -103,23 +104,52 @@
       </div>
 
       <!-- Summary stats -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        <div class="stat-card clickable" onclick="openExpenseView('week')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openExpenseView('week');}">
-          <div class="label-sm mb-2">Spent This Week</div>
-          <div class="display text-3xl" id="stat-week-expenses">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">Tap to see places and transactions</div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+        <div class="stat-card">
+          <div class="label-sm mb-2">This Week</div>
+          <div style="display:grid; grid-template-columns:1fr auto; gap:10px; align-items:end;">
+            <div style="font-size:11px; color:#8b8b8b;">Spent</div>
+            <div class="display text-2xl" id="stat-week-expenses">$0.00</div>
+            <div style="font-size:11px; color:#8b8b8b;">Earned</div>
+            <div class="display text-2xl" id="stat-week-income" style="color:#29925a;">$0.00</div>
+            <div style="font-size:11px; color:#8b8b8b;">Balance</div>
+            <div class="display text-2xl" id="stat-week-net">$0.00</div>
+          </div>
+          <div class="mt-4" style="font-size:11px; color:#8b8b8b;">Compare this week's income against this week's expenses.</div>
         </div>
-        <div class="stat-card clickable" onclick="openExpenseView('all')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openExpenseView('all');}">
-          <div class="label-sm mb-2">Total Spent</div>
-          <div class="display text-3xl" id="stat-total-expenses">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">Tap to see all spending and tally</div>
+        <div class="stat-card">
+          <div class="label-sm mb-2">This Month</div>
+          <div style="display:grid; grid-template-columns:1fr auto; gap:10px; align-items:end;">
+            <div style="font-size:11px; color:#8b8b8b;">Spent</div>
+            <div class="display text-2xl" id="stat-month-expenses">$0.00</div>
+            <div style="font-size:11px; color:#8b8b8b;">Earned</div>
+            <div class="display text-2xl" id="stat-month-income" style="color:#29925a;">$0.00</div>
+            <div style="font-size:11px; color:#8b8b8b;">Balance</div>
+            <div class="display text-2xl" id="stat-month-net">$0.00</div>
+          </div>
+          <div class="mt-4" style="font-size:11px; color:#8b8b8b;">Selected month totals update with the month picker above.</div>
+        </div>
+        <div class="stat-card">
+          <div class="label-sm mb-2">Overall Totals</div>
+          <div style="display:grid; grid-template-columns:1fr auto; gap:10px; align-items:end;">
+            <div style="font-size:11px; color:#8b8b8b;">Expenses so far</div>
+            <div class="display text-2xl" id="stat-total-expenses">$0.00</div>
+            <div style="font-size:11px; color:#8b8b8b;">Income so far</div>
+            <div class="display text-2xl" id="stat-total-income" style="color:#29925a;">$0.00</div>
+            <div style="font-size:11px; color:#8b8b8b;">Net total</div>
+            <div class="display text-2xl" id="stat-total-net">$0.00</div>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button class="btn btn-outline" type="button" onclick="openExpenseView('all')">View Expenses</button>
+            <a href="income.html" class="btn btn-outline" style="text-decoration:none;">View Income</a>
+          </div>
         </div>
       </div>
 
       <!-- Charts row -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div class="card p-6">
-          <div class="label-sm mb-1">Weekly Expenses</div>
+          <div class="label-sm mb-1">Weekly Income Vs Expenses</div>
           <div class="divider mb-4"></div>
           <canvas id="chart-weekly" height="200"></canvas>
         </div>
@@ -132,10 +162,10 @@
 
       <!-- Recent entries -->
       <div class="card p-6 mb-6">
-        <div class="label-sm mb-1">Recent Expenses</div>
+        <div class="label-sm mb-1">Recent Transactions</div>
         <div class="divider mb-4"></div>
         <div id="recent-list">
-          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No expenses yet. Add your first expense above.</div>
+          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No transactions yet. Add an expense or income entry to get started.</div>
         </div>
       </div>
     </div>
@@ -219,6 +249,12 @@
           <div class="divider"></div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full sm:w-auto">
+          <input id="filter-search" class="form-input" style="width:100%; min-width:220px;" placeholder="Search place, source, category, notes..." oninput="renderHistory()" />
+          <select id="filter-type" class="form-input" style="width:auto;" onchange="renderHistory()">
+            <option value="all">All entries</option>
+            <option value="expense">Expenses only</option>
+            <option value="income">Income only</option>
+          </select>
           <select id="filter-period" class="form-input" style="width:auto;" onchange="renderHistory()">
             <option value="all">All time</option>
             <option value="week">This week</option>
