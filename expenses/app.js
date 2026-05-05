@@ -360,11 +360,16 @@ function loadReceiptFiles(files) {
   currentReceiptFiles = files.slice(0, 10);
   currentReceiptDataUrls = [];
 
-  const readPromises = currentReceiptFiles.map(file => new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target.result);
-    reader.readAsDataURL(file);
-  }));
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = () => reject(new Error((file && file.name ? file.name : 'Receipt') + ': load failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const readPromises = currentReceiptFiles.map(file => readFileAsDataURL(file));
 
   Promise.all(readPromises).then((dataUrls) => {
     currentReceiptDataUrls = dataUrls;
@@ -375,6 +380,11 @@ function loadReceiptFiles(files) {
     document.getElementById('upload-placeholder').style.display = 'none';
     document.getElementById('analyze-btn').style.display = 'block';
     document.getElementById('ai-result').style.display = 'none';
+  }).catch((err) => {
+    currentReceiptDataUrls = [];
+    document.getElementById('ai-result').innerHTML = `<div style="background:#fff5f5; border:1px solid #fed7d7; padding:12px; font-size:12px; color:#c53030;">Could not load one or more images: ${err.message}</div>`;
+    document.getElementById('ai-result').style.display = 'block';
+    showToast('Could not load selected image files');
   });
 }
 
@@ -450,8 +460,26 @@ Rules:
     // Analyze all receipts in parallel
     const analyzeOne = async (idx) => {
       try {
-        const base64 = currentReceiptDataUrls[idx].split(',')[1];
-        const mimeType = currentReceiptFiles[idx].type || 'image/jpeg';
+        const file = currentReceiptFiles[idx];
+        if (!file) throw new Error('file missing');
+
+        let dataUrl = currentReceiptDataUrls[idx] || '';
+        if (!dataUrl) {
+          dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result || '');
+            reader.onerror = () => reject(new Error('load failed'));
+            reader.readAsDataURL(file);
+          });
+          currentReceiptDataUrls[idx] = dataUrl;
+        }
+
+        if (typeof dataUrl !== 'string' || !dataUrl.includes(',')) {
+          throw new Error('load failed');
+        }
+
+        const base64 = dataUrl.split(',')[1];
+        const mimeType = file.type || 'image/jpeg';
 
         let data = null;
         let lastErrorMessage = '';
@@ -560,7 +588,6 @@ Rules:
       ? 'No compatible Gemini model was available for this key/project. In Google AI Studio, create a new API key in your own project and ensure Gemini API is enabled.'
       : `Analysis failed: ${err.message}`;
 
-    document.getElementById('ai-result').innerHTML = `<div style="background:#fff5f5; border:1px solid #fed7d7; padding:12px; font-size:12px; color:#c53030;">Analysis failed: ${err.message}</div>`;
     document.getElementById('ai-result').innerHTML = `<div style="background:#fff5f5; border:1px solid #fed7d7; padding:12px; font-size:12px; color:#c53030;">${detail}</div>`;
     document.getElementById('ai-result').style.display = 'block';
     showToast(isQuotaError ? 'Gemini quota exceeded' : 'Analysis failed — check your API key');
