@@ -212,6 +212,7 @@ function localSaveReceiptsByTx(receiptsMap) {
 let transactions = []; // { id, type: 'expense'|'income', date, store, source, amount, category, notes, receipt_url, created_at }
 let receiptsByTxId = {}; // { [transactionId]: [{ url, name }] }
 let knownReceiptHashes = new Set();
+let selectedMonth = '';
 
 async function loadAllData() {
   if (sbClient) {
@@ -616,23 +617,7 @@ async function saveExpense() {
 
 // ─── Save income ──────────────────────────────────────────────────────────────
 async function saveIncome() {
-  const source = document.getElementById('inc-source').value;
-  const amount = parseFloat(document.getElementById('inc-amount').value);
-  const date   = document.getElementById('inc-date').value;
-  const notes  = document.getElementById('inc-notes').value.trim();
-
-  if (!source)       { showToast('Please select an income source'); return; }
-  if (isNaN(amount) || amount <= 0) { showToast('Please enter a valid amount'); return; }
-  if (!date)         { showToast('Please select a date'); return; }
-
-  const ok = await addTransaction({ type: 'income', date, store: source, amount, category: 'Income', notes, receipt_url: null });
-  if (ok) {
-    showToast('Income saved');
-    document.getElementById('inc-source').value = '';
-    document.getElementById('inc-amount').value = '';
-    document.getElementById('inc-date').value   = '';
-    document.getElementById('inc-notes').value  = '';
-  }
+  window.location.href = 'income.html';
 }
 
 // ─── Dashboard rendering ──────────────────────────────────────────────────────
@@ -651,10 +636,37 @@ function getWeekBounds(date = new Date()) {
   return { start, end };
 }
 
-function getMonthBounds(date = new Date()) {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  const end   = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+function getMonthBounds(dateOrMonthKey = new Date()) {
+  let d;
+  if (typeof dateOrMonthKey === 'string' && /^\d{4}-\d{2}$/.test(dateOrMonthKey)) {
+    const [y, m] = dateOrMonthKey.split('-').map(Number);
+    d = new Date(y, m - 1, 1);
+  } else {
+    d = new Date(dateOrMonthKey);
+  }
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end   = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
   return { start, end };
+}
+
+function getMonthKey(dateInput) {
+  const d = toDate(dateInput);
+  if (!d) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function toDate(dateInput) {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) return new Date(dateInput);
+  if (typeof dateInput === 'string') {
+    const direct = new Date(dateInput);
+    if (!Number.isNaN(direct.getTime())) return direct;
+    const normalized = new Date(dateInput + 'T00:00:00');
+    if (!Number.isNaN(normalized.getTime())) return normalized;
+  }
+  const fallback = new Date(dateInput);
+  if (!Number.isNaN(fallback.getTime())) return fallback;
+  return null;
 }
 
 function fmt(n) { return '$' + Math.abs(n).toFixed(2); }
@@ -662,32 +674,32 @@ function fmt(n) { return '$' + Math.abs(n).toFixed(2); }
 function renderDashboard() {
   const now = new Date();
   const week  = getWeekBounds(now);
-  const month = getMonthBounds(now);
+  if (!selectedMonth) selectedMonth = getMonthKey(now);
+  const month = getMonthBounds(selectedMonth);
 
   const weekExpenses  = transactions.filter(t => t.type === 'expense' && inRange(t.date, week));
-  const weekIncome    = transactions.filter(t => t.type === 'income'  && inRange(t.date, week));
   const monthExpenses = transactions.filter(t => t.type === 'expense' && inRange(t.date, month));
-  const monthIncome   = transactions.filter(t => t.type === 'income'  && inRange(t.date, month));
 
   const sumAmt = arr => arr.reduce((s, t) => s + parseFloat(t.amount), 0);
 
   const weekExpTotal  = sumAmt(weekExpenses);
   const monthExpTotal = sumAmt(monthExpenses);
-  const net           = sumAmt(monthIncome) - monthExpTotal;
 
   document.getElementById('stat-week-expenses').textContent  = fmt(weekExpTotal);
   document.getElementById('stat-month-expenses').textContent = fmt(monthExpTotal);
-  document.getElementById('stat-net').textContent            = (net >= 0 ? '+' : '-') + fmt(net);
-  document.getElementById('stat-net').style.color            = net >= 0 ? '#29925a' : '#e53e3e';
+  const monthLabel = month.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthLabelEl = document.getElementById('selected-month-label');
+  if (monthLabelEl) monthLabelEl.textContent = monthLabel;
 
+  populateMonthSelect();
   renderWeeklyChart();
   renderStoresChart();
   renderRecent();
-  renderReceiptGallery();
 }
 
 function inRange(dateStr, { start, end }) {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = toDate(dateStr);
+  if (!d) return false;
   return d >= start && d <= end;
 }
 
@@ -738,7 +750,7 @@ function renderWeeklyChart() {
 function renderStoresChart() {
   const canvas = document.getElementById('chart-stores');
   const ctx = canvas.getContext('2d');
-  const month = getMonthBounds(new Date());
+  const month = getMonthBounds(selectedMonth || new Date());
 
   const storeMap = {};
   transactions
@@ -776,9 +788,9 @@ function renderStoresChart() {
 
 function renderRecent() {
   const list = document.getElementById('recent-list');
-  const recent = transactions.slice(0, 8);
+  const recent = transactions.filter(t => t.type === 'expense').slice(0, 8);
   if (!recent.length) {
-    list.innerHTML = '<div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No transactions yet.</div>';
+    list.innerHTML = '<div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No expenses yet.</div>';
     return;
   }
   list.innerHTML = recent.map(t => transactionRow(t)).join('');
@@ -831,16 +843,15 @@ function renderReceiptGallery(searchTerm = '') {
 
 // ─── History rendering ────────────────────────────────────────────────────────
 function renderHistory() {
-  const type   = document.getElementById('filter-type')?.value   || 'all';
   const period = document.getElementById('filter-period')?.value || 'all';
   const now    = new Date();
   const weekB  = getWeekBounds(now);
-  const monthB = getMonthBounds(now);
+  const monthB = getMonthBounds(selectedMonth || now);
 
   let filtered = transactions.filter(t => {
-    if (type !== 'all' && t.type !== type) return false;
+    if (t.type !== 'expense') return false;
     if (period === 'week'  && !inRange(t.date, weekB))  return false;
-    if (period === 'month' && !inRange(t.date, monthB)) return false;
+    if (period === 'selected-month' && !inRange(t.date, monthB)) return false;
     return true;
   });
 
@@ -853,26 +864,52 @@ function renderHistory() {
 }
 
 function transactionRow(t, full = false) {
-  const isExp = t.type === 'expense';
-  const amtColor = isExp ? '#e53e3e' : '#29925a';
-  const amtPrefix = isExp ? '−' : '+';
+  const amtColor = '#e53e3e';
+  const amtPrefix = '−';
   const dateStr = new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-  const primaryReceipt = getReceiptItemsForTransaction(t)[0]?.url || t.receipt_url;
-  const thumb = primaryReceipt
-    ? `<img src="${primaryReceipt}" class="receipt-thumb" onclick="openLightbox('${primaryReceipt}')" alt="Receipt" />`
-    : `<div style="width:64px; height:64px; border:1px solid #e5e5e5; display:flex; align-items:center; justify-content:center; color:#e5e5e5; font-size:20px;">📄</div>`;
 
   return `
     <div class="flex items-center gap-4 p-4" style="border-bottom:1px solid #f0f0f0;">
-      ${thumb}
       <div style="flex:1; min-width:0;">
         <div style="font-size:13px; font-weight:600; color:#212121;">${escHtml(t.store || t.source || '')}</div>
-        <div style="font-size:10px; color:#8b8b8b; letter-spacing:1px; text-transform:uppercase; margin-top:2px;">${escHtml(t.category || '')} · ${dateStr}</div>
-        ${t.notes ? `<div style="font-size:11px; color:#8b8b8b; margin-top:2px;">${escHtml(t.notes)}</div>` : ''}
+        <div style="font-size:10px; color:#8b8b8b; letter-spacing:1px; text-transform:uppercase; margin-top:2px;">${dateStr}</div>
       </div>
       <div style="font-size:16px; font-weight:600; color:${amtColor}; white-space:nowrap;">${amtPrefix}$${parseFloat(t.amount).toFixed(2)}</div>
     </div>`;
+}
+
+function populateMonthSelect() {
+  const el = document.getElementById('month-select');
+  if (!el) return;
+
+  const expenseMonths = Array.from(new Set(
+    transactions
+      .filter((t) => t.type === 'expense')
+      .map((t) => getMonthKey(t.date))
+      .filter(Boolean)
+  )).sort((a, b) => b.localeCompare(a));
+
+  const current = getMonthKey(new Date());
+  if (!expenseMonths.includes(current)) expenseMonths.unshift(current);
+
+  el.innerHTML = expenseMonths.map((key) => {
+    const d = new Date(key + '-01T00:00:00');
+    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return `<option value="${key}">${label}</option>`;
+  }).join('');
+
+  if (!selectedMonth || !expenseMonths.includes(selectedMonth)) {
+    selectedMonth = expenseMonths[0] || current;
+  }
+  el.value = selectedMonth;
+}
+
+function onDashboardMonthChange() {
+  const el = document.getElementById('month-select');
+  if (!el) return;
+  selectedMonth = el.value;
+  renderDashboard();
+  renderHistory();
 }
 
 function getReceiptItemsForTransaction(tx) {
@@ -910,7 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Set today's date as default
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('exp-date').value = today;
-  document.getElementById('inc-date').value = today;
+  selectedMonth = getMonthKey(today);
 
   // Load Supabase if configured, otherwise use localStorage
   const cfg = getConfig();

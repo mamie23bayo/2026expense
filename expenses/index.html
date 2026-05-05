@@ -28,8 +28,8 @@
     .card { background: #fff; border: 1px solid #e5e5e5; }
     .stat-card { background: #fff; border: 1px solid #e5e5e5; padding: 24px; }
     .divider { width: 32px; height: 2px; background: #29925a; }
-    #tab-dashboard, #tab-expense, #tab-income, #tab-history { display: none; }
-    #tab-dashboard.active, #tab-expense.active, #tab-income.active, #tab-history.active { display: block; }
+    #tab-dashboard, #tab-expense, #tab-history { display: none; }
+    #tab-dashboard.active, #tab-expense.active, #tab-history.active { display: block; }
     .receipt-thumb { width: 64px; height: 64px; object-fit: cover; border: 1px solid #e5e5e5; cursor: pointer; }
     .receipt-thumb:hover { border-color: #29925a; }
     .status-pill { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; padding: 3px 10px; }
@@ -66,6 +66,8 @@
       </div>
       <div class="flex items-center gap-2">
         <a href="weekly.html" class="btn btn-outline text-xs" style="text-decoration:none;">Weekly Payout</a>
+        <a href="income.html" class="btn btn-outline text-xs" style="text-decoration:none;">Income</a>
+        <a href="images.html" class="btn btn-outline text-xs" style="text-decoration:none;">Receipt Images</a>
         <button onclick="openConfig()" class="btn btn-outline text-xs">⚙ Settings</button>
       </div>
     </div>
@@ -76,7 +78,6 @@
     <div class="max-w-5xl mx-auto px-4 sm:px-6 flex gap-0 tabs-scroll">
       <button class="tab-btn active" onclick="switchTab('dashboard', this)">Dashboard</button>
       <button class="tab-btn" onclick="switchTab('expense', this)">Add Expense</button>
-      <button class="tab-btn" onclick="switchTab('income', this)">Add Income</button>
       <button class="tab-btn" onclick="switchTab('history', this)">History</button>
     </div>
   </div>
@@ -86,22 +87,31 @@
 
     <!-- DASHBOARD TAB -->
     <div id="tab-dashboard" class="active">
+      <div class="card p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between" style="gap:16px;">
+          <div>
+            <div class="label-sm mb-1">Month View</div>
+            <div class="divider mb-2"></div>
+            <div style="font-size:12px; color:#8b8b8b;">Pick any month to see total spent and store breakdown.</div>
+          </div>
+          <div style="width:100%; max-width:260px;">
+            <label class="form-label">Selected Month</label>
+            <select id="month-select" class="form-input" onchange="onDashboardMonthChange()"></select>
+          </div>
+        </div>
+      </div>
+
       <!-- Summary stats -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <div class="stat-card">
           <div class="label-sm mb-2">This Week</div>
           <div class="display text-3xl" id="stat-week-expenses">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">expenses</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">money spent</div>
         </div>
         <div class="stat-card">
-          <div class="label-sm mb-2">This Month</div>
+          <div class="label-sm mb-2" id="selected-month-label">Selected Month</div>
           <div class="display text-3xl" id="stat-month-expenses">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">expenses</div>
-        </div>
-        <div class="stat-card">
-          <div class="label-sm mb-2">Net (Month)</div>
-          <div class="display text-3xl" id="stat-net">$0.00</div>
-          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">income − expenses</div>
+          <div style="font-size:11px; color:#8b8b8b;" class="mt-1">money spent</div>
         </div>
       </div>
 
@@ -121,32 +131,10 @@
 
       <!-- Recent entries -->
       <div class="card p-6 mb-6">
-        <div class="label-sm mb-1">Recent Transactions</div>
+        <div class="label-sm mb-1">Recent Expenses</div>
         <div class="divider mb-4"></div>
         <div id="recent-list">
-          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No transactions yet. Add your first expense or income above.</div>
-        </div>
-      </div>
-
-      <!-- Receipt Gallery -->
-      <div class="card p-6">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1" style="gap:16px;">
-          <div>
-            <div class="label-sm">Receipt Gallery</div>
-            <div style="font-size:10px; color:#8b8b8b; margin-top:2px;">Files saved as StoreName_Date — tap to enlarge, download to save</div>
-          </div>
-          <input
-            type="text"
-            id="gallery-search"
-            class="form-input"
-            style="width:100%; max-width:220px; font-size:12px; padding:8px 12px;"
-            placeholder="Search store or date…"
-            oninput="renderReceiptGallery(this.value.toLowerCase().trim())"
-          />
-        </div>
-        <div class="divider mb-5"></div>
-        <div id="receipt-gallery" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:12px;">
-          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0; grid-column:1/-1;">No receipts saved yet.</div>
+          <div style="font-size:12px; color:#8b8b8b; text-align:center; padding:32px 0;">No expenses yet. Add your first expense above.</div>
         </div>
       </div>
     </div>
@@ -222,40 +210,6 @@
       </div>
     </div>
 
-    <!-- ADD INCOME TAB -->
-    <div id="tab-income">
-      <div class="max-w-lg mx-auto card p-8">
-        <div class="label-sm mb-1">Record Income</div>
-        <div class="divider mb-6"></div>
-
-        <div class="mb-4">
-          <label class="form-label">Source</label>
-          <select id="inc-source" class="form-input">
-            <option value="">Select source…</option>
-            <option>Farmers Market</option>
-            <option>Online Orders</option>
-            <option>Catering</option>
-            <option>Chefs</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div class="mb-4">
-          <label class="form-label">Amount ($)</label>
-          <input type="number" id="inc-amount" class="form-input" placeholder="0.00" step="0.01" min="0" />
-        </div>
-        <div class="mb-4">
-          <label class="form-label">Date</label>
-          <input type="date" id="inc-date" class="form-input" />
-        </div>
-        <div class="mb-6">
-          <label class="form-label">Notes (optional)</label>
-          <textarea id="inc-notes" class="form-input" rows="2" placeholder="e.g. Saturday market, rainy day"></textarea>
-        </div>
-
-        <button onclick="saveIncome()" class="btn btn-green w-full">Save Income</button>
-      </div>
-    </div>
-
     <!-- HISTORY TAB -->
     <div id="tab-history">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6" style="gap:16px;">
@@ -264,15 +218,10 @@
           <div class="divider"></div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full sm:w-auto">
-          <select id="filter-type" class="form-input" style="width:auto;" onchange="renderHistory()">
-            <option value="all">All</option>
-            <option value="expense">Expenses only</option>
-            <option value="income">Income only</option>
-          </select>
           <select id="filter-period" class="form-input" style="width:auto;" onchange="renderHistory()">
             <option value="all">All time</option>
             <option value="week">This week</option>
-            <option value="month">This month</option>
+            <option value="selected-month">Selected month</option>
           </select>
         </div>
       </div>
